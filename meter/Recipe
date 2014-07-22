@@ -1,0 +1,22 @@
+project {
+    name = libhvmeter
+    version = 0.1.0
+}
+
+libraries {
+    hvmeter {
+        sources = hv-meter.vala
+        vala-packages = gtk+-3.0
+        packages = gtk+-3.0
+        gir-namespace = HV
+    }
+}
+
+programs {
+    hvmeter_example {
+        sources = hv-meter_example.vala
+        vala-packages = gtk+-3.0
+        packages = gtk+-3.0
+        libraries = hvmeter (local)
+    }
+}

@@ -6,50 +6,35 @@ from gi.repository import Gtk
 import cairo
 
 
-class GtkMeter(Gtk.DrawingArea, Gtk.Orientable):
-    adjustment = GObject.Property(type=Gtk.Adjustment,
-                                  default=None,
-                                  nick="Adjustment",
-                                  blurb="The GtkAdjustment that contains the current value of this range object")
+class GtkMeter(Gtk.Range):
     peak = GObject.Property(type=float, default=0.0)
-    lower = GObject.Property(type=float, default=-60.0)
-    upper = GObject.Property(type=float, default=6.0)
     iec_lower = GObject.Property(type=float, default=0.0)
     iec_upper = GObject.Property(type=float, default=0.0)
-    amber_level = GObject.Property(type=float, default=0.0)
     amber_frac = GObject.Property(type=float, default=0.0)
 
-    def get_orientation(self):
-        return self._orientation
+    def get_warn_point(self):
+        return self._warn_point
 
-    def set_orientation(self, orientation):
-        self._orientation = orientation
+    def set_warn_point(self, pt):
+        self._warn_point = pt
 
-        self.queue_resize()
-    orientation = GObject.Property(get_orientation, set_orientation, Gtk.Orientation, Gtk.Orientation.VERTICAL)
-
-    def get_inverted(self):
-        return self._inverted
-
-    def set_inverted(self, inverted):
-        self._inverted = inverted
+        if (self.get_inverted()):
+            self.amber_frac = 1.0 - (self.iec_scale(self.warn_point) - self.iec_lower) / (self.iec_upper - self.iec_lower)
+        else:
+            self.amber_frac = (self.iec_scale(self.warn_point) - self.iec_lower) / (self.iec_upper - self.iec_lower)
 
         self.queue_draw()
-    inverted = GObject.Property(get_inverted, set_inverted, bool, False)
+
+    warn_point = GObject.Property(get_warn_point, set_warn_point, float, -6.0)
 
 
-    def __init__(self, adjustment, orientation, min, max):
-        if (not isinstance(adjustment, Gtk.Adjustment)): return
-        
+    def __init__(self, adjustment, orientation):
         super().__init__()
 
-        self.adjustment = adjustment
+        self.set_adjustment(adjustment)
         self.set_orientation(orientation)
-        self.set_inverted(False)
-        self.lower = min
-        self.upper = max
-        self.iec_lower = self.iec_scale(min)
-        self.iec_upper = self.iec_scale(max)
+        self.iec_lower = self.iec_scale(self.get_adjustment().get_lower())
+        self.iec_upper = self.iec_scale(self.get_adjustment().get_upper())
 
         # old vars #
         self.old_value = 0.0
@@ -57,36 +42,33 @@ class GtkMeter(Gtk.DrawingArea, Gtk.Orientable):
         self.old_upper = 0.0
 
         # size request #
-        if (self._orientation == Gtk.Orientation.VERTICAL):
+        if (self.get_orientation() == Gtk.Orientation.VERTICAL):
             self.set_size_request (20, 10)
         else:
             self.set_size_request (10, 20)
 
         # Callbacks #
 
-        ## Meter callbacks ##
-        self.connect('draw', self.draw)
-
         ## Adjustment callbacks ##
-        self.adjustment.connect('value-changed', self.adjustment_value_changed)
+        self.get_adjustment().connect('value-changed', self.adjustment_value_changed)
 
-    def draw(self, meter, cr):
-        width = meter.get_allocated_width()
-        height = meter.get_allocated_height()
+    def do_draw(self, cr):
+        width = self.get_allocated_width()
+        height = self.get_allocated_height()
 
-        if (self._orientation == Gtk.Orientation.VERTICAL):
+        if (self.get_orientation() == Gtk.Orientation.VERTICAL):
             dw = width - 2
             dh = height - 2
         else:
             dw = height - 2
             dh = width - 2
 
-        if (self._orientation == Gtk.Orientation.VERTICAL):
+        if (self.get_orientation() == Gtk.Orientation.VERTICAL):
             pat = cairo.LinearGradient(width / 2, height, width / 2, 0)
         else:
             pat = cairo.LinearGradient(0, height / 2, width, height / 2)
 
-        if (self._inverted):
+        if (self.get_inverted()):
             pat.add_color_stop_rgba(1, 0, 0, 0, 1)
             pat.add_color_stop_rgba(0, 0.6, 0.6, 0.6, 1)
         else:
@@ -97,7 +79,7 @@ class GtkMeter(Gtk.DrawingArea, Gtk.Orientable):
         cr.set_source(pat)
         cr.fill()
 
-        val = self.iec_scale(self.adjustment.get_value())
+        val = self.iec_scale(self.get_adjustment().get_value())
 
         frac = (val - self.iec_lower) / (self.iec_upper - self.iec_lower)
         peak_frac = (self.peak - self.iec_lower) / (self.iec_upper - self.iec_lower)
@@ -130,39 +112,39 @@ class GtkMeter(Gtk.DrawingArea, Gtk.Orientable):
         # Generate bars #
 
         ## Green bar ##
-        if (self._orientation == Gtk.Orientation.VERTICAL and self._inverted):
+        if (self.get_orientation() == Gtk.Orientation.VERTICAL and self.get_inverted()):
             cr.rectangle(2, 2, dw, g_h)
-        elif (self._orientation == Gtk.Orientation.VERTICAL and not self._inverted):
+        elif (self.get_orientation() == Gtk.Orientation.VERTICAL and not self.get_inverted()):
             cr.rectangle(2, dh - g_h, dw, g_h)
-        elif (self._orientation == Gtk.Orientation.HORIZONTAL and self._inverted):
+        elif (self.get_orientation() == Gtk.Orientation.HORIZONTAL and self.get_inverted()):
             cr.rectangle(dh - g_h, 2, g_h, dw)
-        elif (self._orientation == Gtk.Orientation.HORIZONTAL and not self._inverted):
+        elif (self.get_orientation() == Gtk.Orientation.HORIZONTAL and not self.get_inverted()):
             cr.rectangle(2, 2, g_h, dw)
         cr.set_source_rgba(0.1, 0.5, 0.2, 0.8)
         cr.fill()
 
         ## Amber bar ##
         if (a_h > g_h):
-            if (self._orientation == Gtk.Orientation.VERTICAL and self._inverted):
+            if (self.get_orientation() == Gtk.Orientation.VERTICAL and self.get_inverted()):
                 cr.rectangle(2, g_h, dw, a_h - g_h)
-            elif (self._orientation == Gtk.Orientation.VERTICAL and not self._inverted):
+            elif (self.get_orientation() == Gtk.Orientation.VERTICAL and not self.get_inverted()):
                 cr.rectangle(2, dh - a_h, dw, a_h - g_h)
-            elif (self._orientation == Gtk.Orientation.HORIZONTAL and self._inverted):
+            elif (self.get_orientation() == Gtk.Orientation.HORIZONTAL and self.get_inverted()):
                 cr.rectangle(dh - a_h, 2, a_h - g_h, dw)
-            elif (self._orientation == Gtk.Orientation.HORIZONTAL and not self._inverted):
+            elif (self.get_orientation() == Gtk.Orientation.HORIZONTAL and not self.get_inverted()):
                 cr.rectangle(g_h, 2, a_h - g_h, dw)
             cr.set_source_rgba(0.8, 0.8, 0.2, 0.8)
             cr.fill()
 
         ## Red bar ##
         if (r_h > a_h):
-            if (self._orientation == Gtk.Orientation.VERTICAL and self._inverted):
+            if (self.get_orientation() == Gtk.Orientation.VERTICAL and self.get_inverted()):
                 cr.rectangle(2, a_h, dw, r_h - a_h)
-            elif (self._orientation == Gtk.Orientation.VERTICAL and not self._inverted):
+            elif (self.get_orientation() == Gtk.Orientation.VERTICAL and not self.get_inverted()):
                 cr.rectangle(2, dh - r_h, dw, r_h - a_h)
-            elif (self._orientation == Gtk.Orientation.HORIZONTAL and self._inverted):
+            elif (self.get_orientation() == Gtk.Orientation.HORIZONTAL and self.get_inverted()):
                 cr.rectangle(dh - r_h, 2, r_h - a_h, dw)
-            elif (self._orientation == Gtk.Orientation.HORIZONTAL and not self._inverted):
+            elif (self.get_orientation() == Gtk.Orientation.HORIZONTAL and not self.get_inverted()):
                 cr.rectangle(a_h, 2,  r_h - a_h , dw)
             cr.set_source_rgba(1, 0, 0.1, 0.8)
             cr.fill()
@@ -188,7 +170,7 @@ class GtkMeter(Gtk.DrawingArea, Gtk.Orientable):
         cr.fill()
 
         # left hand glass bubble effect #
-        if (self._orientation == Gtk.Orientation.VERTICAL):
+        if (self.get_orientation() == Gtk.Orientation.VERTICAL):
             pat = cairo.LinearGradient(2, dh / 2, dw / 2, dh / 2)
         else:
             pat = cairo.LinearGradient(dh / 2, 2, dh / 2, dw / 2)
@@ -196,7 +178,7 @@ class GtkMeter(Gtk.DrawingArea, Gtk.Orientable):
         pat.add_color_stop_rgba (0, 0, 0.2, 0.7, 0.2)
         pat.add_color_stop_rgba (1, 1.0, 1.0, 1.0, 0.3)
         
-        if (self._orientation == Gtk.Orientation.VERTICAL):
+        if (self.get_orientation() == Gtk.Orientation.VERTICAL):
             cr.rectangle(2, 2, dw / 2, dh - 2)
         else:
             cr.rectangle(2, 2, dh - 2, dw / 2 - 2)
@@ -204,7 +186,7 @@ class GtkMeter(Gtk.DrawingArea, Gtk.Orientable):
         cr.fill()
 
         # right hand glass bubble effect #
-        if (self._orientation == Gtk.Orientation.VERTICAL):
+        if (self.get_orientation() == Gtk.Orientation.VERTICAL):
             pat = cairo.LinearGradient(dw / 2, 2, dw - 2, 2)
         else:
             pat = cairo.LinearGradient(2, dw / 2 + 2, 2, dw)
@@ -212,7 +194,7 @@ class GtkMeter(Gtk.DrawingArea, Gtk.Orientable):
         pat.add_color_stop_rgba (1, 0.0, 0.4, 1.0, 0.2)
         pat.add_color_stop_rgba (0, 1.0, 1.0, 1.0, 0.3)
 
-        if (self._orientation == Gtk.Orientation.VERTICAL):
+        if (self.get_orientation() == Gtk.Orientation.VERTICAL):
             cr.rectangle(dw / 2 + 2, 2, dw / 2 - 2, dh - 2)
         else:
             cr.rectangle(0, dw / 2, dh, dw)
@@ -220,32 +202,32 @@ class GtkMeter(Gtk.DrawingArea, Gtk.Orientable):
         cr.fill()
 
         # draw notches #
-        # self.draw_notch(cr, 0.0, 4, dw, dh)
+        self.draw_notch(cr, 0.0, 4, dw, dh)
 
-        # for val in range(5, int(self.upper), 5):
-        #     self.draw_notch(cr, val, 2, dw, dh)
+        for val in range(5, int(self.get_adjustment().get_upper()), 5):
+            self.draw_notch(cr, val, 2, dw, dh)
 
-        # for val in range(int(self.lower), 0, 5):
-        #     self.draw_notch(cr, val, 2, dw, dh)
+        for val in range(int(self.get_adjustment().get_lower() + 5), 0, 5):
+            self.draw_notch(cr, val, 2, dw, dh)
 
-        # for val in range(-10, int(self.upper)):
-        #     self.draw_notch(cr, val, 1, dw, dh)
+        for val in range(-10, int(self.get_adjustment().get_upper())):
+            self.draw_notch(cr, val, 1, dw, dh)
 
-        return False
+        return True
 
     def draw_notch(self, cr, db, mark, dw, dh):
-        if (self._orientation == Gtk.Orientation.HORIZONTAL and self._inverted):
+        if (self.get_orientation() == Gtk.Orientation.HORIZONTAL and self.get_inverted()):
             pos = dh * (self.iec_scale(db) - self.iec_lower) / (self.iec_upper - self.iec_lower)
-        elif (self._orientation == Gtk.Orientation.HORIZONTAL and not self._inverted):
+        elif (self.get_orientation() == Gtk.Orientation.HORIZONTAL and not self.get_inverted()):
             pos = dh - dh * (self.iec_scale(db) - self.iec_lower) / (self.iec_upper - self.iec_lower)
-        elif (self._orientation == Gtk.Orientation.VERTICAL and not self._inverted):
+        elif (self.get_orientation() == Gtk.Orientation.VERTICAL and not self.get_inverted()):
             pos = dh * (self.iec_scale(db) - self.iec_lower) / (self.iec_upper - self.iec_lower)
-        elif (self._orientation == Gtk.Orientation.VERTICAL and self._inverted):
+        elif (self.get_orientation() == Gtk.Orientation.VERTICAL and self.get_inverted()):
             pos = dh - dh * (self.iec_scale(db) - self.iec_lower) / (self.iec_upper - self.iec_lower)
 
         cr.set_source_rgba (0, 0, 0, 0.8)
 
-        if (self._orientation == Gtk.Orientation.HORIZONTAL):
+        if (self.get_orientation() == Gtk.Orientation.HORIZONTAL):
             cr.rectangle(dh - pos, dw / 2 - mark / 2, 1, mark + 1)
             cr.fill()
         else:
@@ -257,7 +239,7 @@ class GtkMeter(Gtk.DrawingArea, Gtk.Orientable):
             self.iec_lower = self.iec_scale(adj.get_lower())
             self.iec_upper = self.iec_scale(adj.get_upper())
 
-            self.set_warn_point(self.amber_level)
+            self.set_warn_point(self.warn_point)
 
             self.old_lower = adj.get_lower()
             self.old_upper = adj.get_upper()
@@ -284,13 +266,3 @@ class GtkMeter(Gtk.DrawingArea, Gtk.Orientable):
             defr = (db + 20.0) * 2.5 + 50.0
 
         return defr
-
-    def set_warn_point(self, pt):
-        self.amber_level = pt
-
-        if (self._inverted):
-            self.amber_frac = 1.0 - (self.iec_scale(self.amber_level) - self.iec_lower) / (self.iec_upper - self.iec_lower)
-        else:
-            self.amber_frac = (self.iec_scale(self.amber_level) - self.iec_lower) / (self.iec_upper - self.iec_lower)
-
-        self.queue_draw()

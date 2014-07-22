@@ -20,10 +20,11 @@ win = Gtk.Window.new(Gtk.WindowType.TOPLEVEL)
 #win.set_size_request(300, 300)
 
 adj = Gtk.Adjustment(0, -60, 6, 0.1, 0, 0)
-meter = GtkMeter(adj, Gtk.Orientation.VERTICAL, -60.0, 6.0)
+meter = GtkMeter(adj, Gtk.Orientation.VERTICAL)
 meter.set_warn_point(-5.0)
 
 scale = Gtk.Scale(orientation=Gtk.Orientation.VERTICAL, adjustment=adj)
+scale.set_inverted(True)
 
 box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
 box.pack_start(meter, True, True, 0)
